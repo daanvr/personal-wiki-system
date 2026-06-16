@@ -1,3 +1,6 @@
+# Machine-specific config (use config.example as the template)
+/config
+
 # macOS
 .DS_Store
 .AppleDouble

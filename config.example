@@ -1,0 +1,8 @@
+# Path to the knowledge base (the private data repo).
+#
+# May be absolute (e.g. /Users/you/personal-wiki-system/knowledge) or relative
+# to this system repository's root (e.g. ../knowledge when it sits beside system/).
+#
+# Copy this file to `config` and edit the path, or run ./init.sh to create a
+# knowledge base and generate `config` automatically.
+KNOWLEDGE_PATH=../knowledge
