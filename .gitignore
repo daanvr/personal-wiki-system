@@ -1,6 +1,14 @@
 # Machine-specific config (use config.example as the template)
 /config
 
+# Module account configs and secrets (use each module's config.example)
+modules/*/config
+modules/*/secret.txt
+
+# Python
+__pycache__/
+*.pyc
+
 # macOS
 .DS_Store
 .AppleDouble
