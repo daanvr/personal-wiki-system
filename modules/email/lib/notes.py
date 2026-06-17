@@ -9,6 +9,7 @@ from __future__ import annotations
 import email
 import email.policy
 import hashlib
+import html
 import re
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
@@ -72,7 +73,7 @@ def _html_to_text(html: str) -> str:
 
 def extract_body(msg) -> str:
     """Best-effort Markdown body: prefer text/plain, fall back to HTML."""
-    plain = html = None
+    plain = html_body = None
     for part in msg.walk() if msg.is_multipart() else [msg]:
         if part.is_multipart() or part.get_content_disposition() == "attachment":
             continue
@@ -83,12 +84,15 @@ def extract_body(msg) -> str:
             continue
         if ctype == "text/plain" and plain is None:
             plain = content
-        elif ctype == "text/html" and html is None:
-            html = content
+        elif ctype == "text/html" and html_body is None:
+            html_body = content
     if plain is not None:
-        return plain.strip()
-    if html is not None:
-        return _html_to_text(html)
+        # Some senders (e.g. Google Calendar) HTML-escape their plain-text
+        # part, so unescape entities here too — _html_to_text already decodes
+        # them on the HTML path.
+        return html.unescape(plain).strip()
+    if html_body is not None:
+        return _html_to_text(html_body)
     return ""
 
 

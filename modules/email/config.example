@@ -30,8 +30,9 @@ SECRET_REF=CIRRUX_APP_PASSWORD
 FOLDERS=ALL
 
 # Folders to skip (comma-separated, case-insensitive; matches a folder name
-# or any path segment). Sensible defaults below.
-EXCLUDE_FOLDERS=Trash,Junk,Spam,Drafts
+# or any path segment). Defaults cover the common names across providers,
+# including singular/plural variants (e.g. Cirrux uses "Draft"/"Junk").
+EXCLUDE_FOLDERS=Trash,Junk,Spam,Draft,Drafts
 
 # Where notes are written: a subfolder under the knowledge base's sources/
 # directory. Final path: <knowledge>/sources/<OUTPUT_SUBDIR>/
