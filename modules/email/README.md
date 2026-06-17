@@ -25,8 +25,9 @@ a gitignored file); the ingested mail is written into the **private**
 
 ## Setup
 
-1. **Have Python 3.** On Windows use the `py` launcher (plain `python` is the
-   Microsoft Store stub). No `pip install` — standard library only.
+1. **Have Python 3** (standard library only — no `pip install`). Invoke it with
+   `python3` on macOS/Linux, or the `py` launcher on Windows (plain `python`
+   there is the Microsoft Store stub). The examples below use `python3`.
 
 2. **Create your account config:**
    ```sh
@@ -38,17 +39,24 @@ a gitignored file); the ingested mail is written into the **private**
 3. **Provide the password without committing it.** Generate a Cirrux
    *app-specific password*, then expose it via the env var named in
    `SECRET_REF` (default `CIRRUX_APP_PASSWORD`):
+   ```sh
+   # macOS / Linux (current shell)
+   export CIRRUX_APP_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+   ```
    ```powershell
-   $env:CIRRUX_APP_PASSWORD = "xxxx-xxxx-xxxx-xxxx"   # PowerShell, current session
+   # Windows (PowerShell, current session)
+   $env:CIRRUX_APP_PASSWORD = "xxxx-xxxx-xxxx-xxxx"
    ```
 
 ## Usage
 
+Use `python3` on macOS/Linux (or `py` on Windows):
+
 ```sh
-py ingest.py check                 # connect, authenticate, list folders + counts
-py ingest.py sync --dry-run        # show what would be written, write nothing
-py ingest.py sync --limit 20       # first real run, capped per folder
-py ingest.py sync                  # full incremental sync
+python3 ingest.py check            # connect, authenticate, list folders + counts
+python3 ingest.py sync --dry-run   # show what would be written, write nothing
+python3 ingest.py sync --limit 20  # first real run, capped per folder
+python3 ingest.py sync             # full incremental sync
 ```
 
 `check` is the thing to run first — it proves the connection and credentials

@@ -22,6 +22,17 @@ personal-wiki-system/
 └── knowledge/   ← separate private repository
 ```
 
+## Requirements
+
+The tooling is cross-platform (macOS, Linux, Windows):
+
+- **Shell scripts** (`init.sh` and friends) are Bash. They run natively on
+  macOS/Linux; on Windows run them under **Git Bash** or **WSL**
+  (e.g. `bash init.sh`).
+- **Python 3** for modules that need it — standard library only, no extra
+  packages. Invoke it as `python3` on macOS/Linux, or via the `py` launcher on
+  Windows (plain `python` there is the Microsoft Store stub).
+
 ## Status
 
 Early setup — structure and tooling are being added.

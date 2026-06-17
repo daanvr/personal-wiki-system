@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """Email block — ingest mail into the wiki over IMAP (read-only).
 
-On Windows use the ``py`` launcher (plain ``python`` is the Store stub):
+Run with Python 3 (standard library only — no pip install required). Use
+``python3`` on macOS/Linux, or the ``py`` launcher on Windows (where plain
+``python`` is the Microsoft Store stub):
 
-    py ingest.py check                 # connect, authenticate, list folders + counts
-    py ingest.py sync                  # fetch new mail and write notes
-    py ingest.py sync --dry-run        # show what would be written, write nothing
-    py ingest.py sync --folder INBOX   # restrict to one folder
-    py ingest.py sync --limit 20       # cap messages per folder (handy for a first run)
+    python3 ingest.py check    # macOS/Linux
+    py ingest.py check         # Windows
 
-Standard library only — no pip install required.
+Subcommands:
+
+    check                 # connect, authenticate, list folders + counts
+    sync                  # fetch new mail and write notes
+    sync --dry-run        # show what would be written, write nothing
+    sync --folder INBOX   # restrict to one folder
+    sync --limit 20       # cap messages per folder (handy for a first run)
 """
 from __future__ import annotations
 

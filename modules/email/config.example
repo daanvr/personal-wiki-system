@@ -16,7 +16,8 @@ ACCOUNT=you@cirrux.co
 # How the engine finds your password, in priority order:
 #   1. An environment variable named here (recommended — keeps the secret
 #      out of any file). Set it in your shell before running, e.g.
-#      PowerShell:  $env:CIRRUX_APP_PASSWORD = "xxxx-xxxx-xxxx-xxxx"
+#      macOS/Linux:          export CIRRUX_APP_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+#      Windows (PowerShell): $env:CIRRUX_APP_PASSWORD = "xxxx-xxxx-xxxx-xxxx"
 SECRET_REF=CIRRUX_APP_PASSWORD
 #   2. ...or a path to a gitignored file containing only the password.
 #      Used only if the env var above is unset. Absolute, or relative to
