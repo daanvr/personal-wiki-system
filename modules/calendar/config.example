@@ -1,0 +1,42 @@
+# Calendar module — account configuration.
+#
+# Copy this file to `config` (which is gitignored) and fill it in:
+#     cp config.example config
+#
+# This file MAY contain your email address (personal), so the real `config`
+# is never committed. The password is NOT stored here — see SECRET_REF below.
+
+# Which provider profile to use: a file name in providers/ without the .conf
+# extension. "cirrux" -> providers/cirrux.conf
+PROVIDER=cirrux
+
+# Your account login — usually your full email address.
+ACCOUNT=you@cirrux.co
+
+# How the engine finds your password, in priority order:
+#   1. An environment variable named here (recommended — keeps the secret
+#      out of any file). Set it in your shell before running, e.g.
+#      macOS/Linux:          export CIRRUX_APP_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+#      Windows (PowerShell): $env:CIRRUX_APP_PASSWORD = "xxxx-xxxx-xxxx-xxxx"
+SECRET_REF=CIRRUX_APP_PASSWORD
+#   2. ...or a path to a gitignored file containing only the password.
+#      Used only if the env var above is unset. Absolute, or relative to
+#      this module directory.
+# SECRET_FILE=secret.txt
+
+# Calendars to ingest:
+#   ALL                         every discovered calendar
+#   Personal,Work               a comma-separated list of exact calendar names
+CALENDARS=ALL
+
+# Calendars to skip (comma-separated, case-insensitive).
+EXCLUDE_CALENDARS=
+
+# Sync window, relative to now. Keeping this bounded avoids pulling an entire
+# lifetime of old events on the first run.
+DAYS_BACK=30
+DAYS_FORWARD=365
+
+# Where notes are written: a subfolder under the knowledge base's sources/
+# directory. Final path: <knowledge>/sources/<OUTPUT_SUBDIR>/
+OUTPUT_SUBDIR=calendar
