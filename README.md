@@ -22,6 +22,30 @@ personal-wiki-system/
 └── knowledge/   ← separate private repository
 ```
 
+## Getting started
+
+Create a knowledge base next to this repository:
+
+```sh
+./init.sh                 # creates ../knowledge with sources/ and wiki/
+./init.sh /path/to/kb     # or point it at a specific location
+```
+
+This scaffolds the knowledge base (`sources/`, `wiki/`), its `config` and `.gitignore`,
+and writes this repo's `config`. Print the resolved knowledge-base path any time with:
+
+```sh
+./knowledge-path.sh
+```
+
+## Configuration
+
+`config` (gitignored, per machine) defines where the knowledge base lives via
+`KNOWLEDGE_PATH`. It may be **absolute** (a specific location on this machine) or
+**relative** to this repo's root (e.g. `../knowledge` when the repos sit side by side).
+Copy `config.example` to `config`, or let `init.sh` generate it.
+
 ## Status
 
-Early setup — structure and tooling are being added.
+Setup in progress — config and init tooling are in place; wiki structure and conventions
+are still to be designed.
