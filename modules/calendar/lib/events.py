@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import hashlib
-import re
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
-_WIN_RESERVED = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+from _shared import wikilib
 
 
 def _require_icalendar():
@@ -26,20 +25,8 @@ def parse_events(raw: str) -> list[object]:
     return [component for component in calendar.walk() if component.name == "VEVENT"]
 
 
-def _safe_name(name: str) -> str:
-    name = _WIN_RESERVED.sub("_", name).strip().strip(".")
-    return name or "unnamed"
-
-
-def slugify(text: str) -> str:
-    text = (text or "").strip().lower()
-    text = re.sub(r"[^\w\s-]", "", text, flags=re.UNICODE)
-    text = re.sub(r"[\s_-]+", "-", text).strip("-")
-    return text[:60].strip("-")
-
-
 def calendar_subpath(name: str) -> Path:
-    return Path(_safe_name(name))
+    return Path(wikilib.safe_name(name))
 
 
 def prop(component, name: str) -> str:
@@ -50,8 +37,16 @@ def prop(component, name: str) -> str:
 def decoded(component, name: str):
     try:
         return component.decoded(name)
-    except KeyError:
+    except (KeyError, ValueError, TypeError):
+        # Missing property, or a value icalendar cannot decode. Depending on
+        # the icalendar version a malformed date either drops the property
+        # (KeyError) or raises — treat both as "no usable value".
         return None
+
+
+def _is_all_day(value) -> bool:
+    """True for a date-only (VALUE=DATE) property value."""
+    return isinstance(value, date) and not isinstance(value, datetime)
 
 
 def _as_datetime(value) -> datetime | None:
@@ -67,11 +62,11 @@ def _as_datetime(value) -> datetime | None:
 
 
 def _iso(value) -> str:
-    if value is None:
-        return ""
+    # Only real date/datetime values render; icalendar 7.x hands back raw
+    # strings for malformed dates, which must not leak into frontmatter.
     if isinstance(value, (datetime, date)):
         return value.isoformat()
-    return str(value)
+    return ""
 
 
 def event_key(calendar_url: str, component) -> str:
@@ -86,11 +81,7 @@ def note_filename(calendar_url: str, component) -> str:
     datestr = start.strftime("%Y-%m-%d") if start else "undated"
     summary = prop(component, "summary") or "no-title"
     digest = event_key(calendar_url, component)[:8]
-    return f"{datestr} {slugify(summary) or 'no-title'} {digest}.md"
-
-
-def _yaml(s: str) -> str:
-    return (s or "").replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+    return f"{datestr} {wikilib.slugify(summary) or 'no-title'} {digest}.md"
 
 
 def _attendees(component) -> list[str]:
@@ -105,24 +96,27 @@ def _attendees(component) -> list[str]:
 def render(template: str, component, calendar_name: str, calendar_url: str, resource_url: str) -> str:
     start = decoded(component, "dtstart")
     end = decoded(component, "dtend")
+    all_day = _is_all_day(start)
+    if _is_all_day(end):
+        # RFC 5545: an all-day DTEND is exclusive (the day after the last
+        # day) — render the inclusive last day instead.
+        end = end - timedelta(days=1)
     attendees = _attendees(component)
     attendees_block = "\n".join(f"- {a}" for a in attendees) if attendees else ""
 
     fields = {
-        "title": _yaml(prop(component, "summary") or "(no title)"),
-        "calendar": _yaml(calendar_name),
-        "calendar_url": _yaml(calendar_url),
-        "resource_url": _yaml(resource_url),
-        "uid": _yaml(prop(component, "uid")),
-        "status": _yaml(prop(component, "status")),
+        "title": wikilib.yaml_escape(prop(component, "summary") or "(no title)"),
+        "calendar": wikilib.yaml_escape(calendar_name),
+        "calendar_url": wikilib.yaml_escape(calendar_url),
+        "resource_url": wikilib.yaml_escape(resource_url),
+        "uid": wikilib.yaml_escape(prop(component, "uid")),
+        "status": wikilib.yaml_escape(prop(component, "status")),
         "start_iso": _iso(start),
         "end_iso": _iso(end),
-        "location": _yaml(prop(component, "location")),
-        "organizer": _yaml(prop(component, "organizer")),
+        "all_day": "true" if all_day else "false",
+        "location": wikilib.yaml_escape(prop(component, "location")),
+        "organizer": wikilib.yaml_escape(prop(component, "organizer")),
         "attendees_block": attendees_block,
         "description": prop(component, "description"),
     }
-    out = template
-    for key, value in fields.items():
-        out = out.replace("{{" + key + "}}", value)
-    return out
+    return wikilib.render_template(template, fields)

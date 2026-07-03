@@ -1,4 +1,4 @@
-# Email block — account configuration.
+# Email module — account configuration.
 #
 # Copy this file to `config` (which is gitignored) and fill it in:
 #     cp config.example config
@@ -27,6 +27,7 @@ SECRET_REF=CIRRUX_APP_PASSWORD
 # Folders to ingest:
 #   ALL                         every selectable folder on the account
 #   INBOX,Archive,Work/Wiki     a comma-separated list of specific folders
+#                               (matched case-insensitively)
 FOLDERS=ALL
 
 # Folders to skip (comma-separated, case-insensitive; matches a folder name

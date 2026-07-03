@@ -28,7 +28,7 @@ def connect(account: dict, provider: dict, password: str) -> imaplib.IMAP4:
     host = provider.get("IMAP_HOST")
     if not host:
         raise SystemExit("Provider profile is missing IMAP_HOST.")
-    port = int(provider.get("IMAP_PORT", "993"))
+    port = config.get_int(provider, "IMAP_PORT", 993)
     if config.truthy(provider.get("IMAP_SSL", "true")):
         conn: imaplib.IMAP4 = imaplib.IMAP4_SSL(host, port)
     else:
@@ -75,6 +75,15 @@ def list_folders(conn: imaplib.IMAP4) -> list[Folder]:
     return folders
 
 
+def _to_int(token, default: int = 0) -> int:
+    """Tolerant int for server-supplied tokens — a non-conforming server must
+    not crash the run with a raw ValueError."""
+    try:
+        return int(token)
+    except (TypeError, ValueError):
+        return default
+
+
 def folder_status(conn: imaplib.IMAP4, name: str) -> dict:
     """Return {messages, uidnext, uidvalidity} without selecting the box."""
     res = {"messages": 0, "uidnext": 0, "uidvalidity": 0}
@@ -86,9 +95,9 @@ def folder_status(conn: imaplib.IMAP4, name: str) -> dict:
         return res
     tokens = m.group(1).split()
     pairs = dict(zip(tokens[0::2], tokens[1::2]))
-    res["messages"] = int(pairs.get(b"MESSAGES", b"0"))
-    res["uidnext"] = int(pairs.get(b"UIDNEXT", b"0"))
-    res["uidvalidity"] = int(pairs.get(b"UIDVALIDITY", b"0"))
+    res["messages"] = _to_int(pairs.get(b"MESSAGES"))
+    res["uidnext"] = _to_int(pairs.get(b"UIDNEXT"))
+    res["uidvalidity"] = _to_int(pairs.get(b"UIDVALIDITY"))
     return res
 
 
@@ -99,12 +108,18 @@ def select_readonly(conn: imaplib.IMAP4, name: str) -> None:
 
 
 def search_uids(conn: imaplib.IMAP4, since_uid: int = 0) -> list[int]:
-    """UIDs in the selected folder; only those above ``since_uid`` if given."""
+    """UIDs in the selected folder; only those above ``since_uid`` if given.
+
+    Always ascending — RFC 3501 does not guarantee SEARCH result order, and
+    the caller's watermark logic depends on it. Note ``N:*`` always includes
+    the highest-UID message even when its UID is below N, so the caller must
+    still filter ``<= since_uid``.
+    """
     criterion = f"UID {since_uid + 1}:*" if since_uid else "ALL"
     typ, data = conn.uid("search", None, criterion)
     if typ != "OK" or not data or not data[0]:
         return []
-    return [int(x) for x in data[0].split()]
+    return sorted(int(x) for x in data[0].split() if x.isdigit())
 
 
 def fetch_raw(conn: imaplib.IMAP4, uid: int) -> bytes | None:

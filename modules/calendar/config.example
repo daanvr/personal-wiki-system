@@ -26,7 +26,8 @@ SECRET_REF=CIRRUX_APP_PASSWORD
 
 # Calendars to ingest:
 #   ALL                         every discovered calendar
-#   Personal,Work               a comma-separated list of exact calendar names
+#   Personal,Work               a comma-separated list of calendar names
+#                               (matched case-insensitively)
 CALENDARS=ALL
 
 # Calendars to skip (comma-separated, case-insensitive).

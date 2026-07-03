@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Calendar module — ingest CalDAV events into the wiki (read-only).
 
-Run with Python 3:
+Run with Python 3. Use ``python3`` on macOS/Linux, or the ``py`` launcher on
+Windows (where plain ``python`` is the Microsoft Store stub):
 
     python3 ingest.py check
     python3 ingest.py sync --dry-run
@@ -10,7 +11,6 @@ Run with Python 3:
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -18,8 +18,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib import caldav_client, config, events  # noqa: E402
+from _shared import wikilib  # noqa: E402
 
 STATE_FILE = ".sync-state.json"
+STATE_DEFAULTS = {"events": {}}
 TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "calendar-event.md"
 
 
@@ -34,15 +36,18 @@ def _scope_calendars(calendars: list[object], account: dict[str, str], only: str
         if x.strip()
     }
     spec = account.get("CALENDARS", "ALL").strip()
+    wanted = {x.strip().lower() for x in spec.split(",") if x.strip()}
     out = []
     for calendar in calendars:
         name = caldav_client.calendar_name(calendar)
-        if only and name != only:
+        if only:
+            # An explicitly requested calendar is never filtered by the
+            # exclude list.
+            if name == only:
+                out.append(calendar)
             continue
-        if not only and spec.upper() != "ALL":
-            wanted = {x.strip() for x in spec.split(",") if x.strip()}
-            if name not in wanted:
-                continue
+        if spec.upper() != "ALL" and name.lower() not in wanted:
+            continue
         if _excluded(name, excludes):
             continue
         out.append(calendar)
@@ -50,25 +55,18 @@ def _scope_calendars(calendars: list[object], account: dict[str, str], only: str
 
 
 def _window(account: dict[str, str], days_back: int | None, days_forward: int | None) -> tuple[datetime, datetime]:
-    back = days_back if days_back is not None else int(account.get("DAYS_BACK", "30"))
-    forward = days_forward if days_forward is not None else int(account.get("DAYS_FORWARD", "365"))
+    back = days_back if days_back is not None else config.get_int(account, "DAYS_BACK", 30)
+    forward = days_forward if days_forward is not None else config.get_int(account, "DAYS_FORWARD", 365)
     now = datetime.now(timezone.utc)
     return now - timedelta(days=back), now + timedelta(days=forward)
 
 
 def load_state(out_dir: Path) -> dict:
-    path = out_dir / STATE_FILE
-    if path.is_file():
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            pass
-    return {"version": 1, "events": {}}
+    return wikilib.load_state(out_dir, STATE_FILE, STATE_DEFAULTS)
 
 
 def save_state(out_dir: Path, state: dict) -> None:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / STATE_FILE).write_text(json.dumps(state, indent=2), encoding="utf-8")
+    wikilib.save_state(out_dir, STATE_FILE, state)
 
 
 def cmd_check(account: dict[str, str], provider: dict[str, str]) -> int:
@@ -122,44 +120,60 @@ def cmd_sync(
             print(f"{cal_name}: {len(resources)} resource(s) to consider")
 
             for resource in resources:
-                raw = caldav_client.resource_data(resource)
-                resource_url = caldav_client.resource_url(resource)
-                etag = caldav_client.resource_etag(resource)
-                for component in events.parse_events(raw):
-                    key = events.event_key(cal_url, component)
-                    previous = state["events"].get(key, {})
-                    rel = previous.get("path")
-                    if not rel:
-                        rel = str(
-                            events.calendar_subpath(cal_name)
-                            / events.note_filename(cal_url, component)
-                        )
-                    note_path = out_dir / rel
-                    if previous.get("etag") == etag and note_path.exists():
-                        skipped += 1
+                # One unreadable or unparsable resource must not abort the
+                # run (Calendar.from_ical raises on malformed payloads).
+                try:
+                    raw = caldav_client.resource_data(resource)
+                    resource_url = caldav_client.resource_url(resource)
+                    etag = caldav_client.resource_etag(resource)
+                    components = events.parse_events(raw)
+                except Exception as exc:
+                    print(f"  ! skipped an unreadable resource in {cal_name}: {exc}")
+                    continue
+                for component in components:
+                    try:
+                        key = events.event_key(cal_url, component)
+                        previous = state["events"].get(key, {})
+                        rel = previous.get("path")
+                        if not rel:
+                            rel = str(
+                                events.calendar_subpath(cal_name)
+                                / events.note_filename(cal_url, component)
+                            )
+                        note_path = out_dir / rel
+                        # An empty ETag means the server doesn't report one;
+                        # treat as "unknown" and re-render rather than skip
+                        # forever.
+                        if etag and previous.get("etag") == etag and note_path.exists():
+                            skipped += 1
+                            continue
+
+                        content = events.render(template, component, cal_name, cal_url, resource_url)
+                        action = "update" if note_path.exists() else "write"
+                        if dry_run:
+                            print(f"  would {action} {note_path.relative_to(out_dir)}")
+                        else:
+                            note_path.parent.mkdir(parents=True, exist_ok=True)
+                            note_path.write_text(content, encoding="utf-8")
+                            state["events"][key] = {
+                                "path": rel,
+                                "etag": etag,
+                                "calendar": cal_name,
+                                "calendar_url": cal_url,
+                                "resource_url": resource_url,
+                            }
+                        if action == "update":
+                            updated += 1
+                        else:
+                            written += 1
+                    except Exception as exc:
+                        print(f"  ! skipped a malformed event in {cal_name}: {exc}")
                         continue
 
-                    content = events.render(template, component, cal_name, cal_url, resource_url)
-                    action = "update" if note_path.exists() else "write"
-                    if dry_run:
-                        print(f"  would {action} {note_path.relative_to(out_dir)}")
-                    else:
-                        note_path.parent.mkdir(parents=True, exist_ok=True)
-                        note_path.write_text(content, encoding="utf-8")
-                        state["events"][key] = {
-                            "path": rel,
-                            "etag": etag,
-                            "calendar": cal_name,
-                            "calendar_url": cal_url,
-                            "resource_url": resource_url,
-                        }
-                    if action == "update":
-                        updated += 1
-                    else:
-                        written += 1
-
-    if not dry_run:
-        save_state(out_dir, state)
+            if not dry_run:
+                # Persist per calendar so a failure later in the run doesn't
+                # discard the progress already made.
+                save_state(out_dir, state)
 
     verb = "Would write" if dry_run else "Wrote"
     print(f"\n{verb} {written} note(s); updated {updated}; skipped {skipped} unchanged.")

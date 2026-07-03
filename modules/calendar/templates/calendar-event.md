@@ -3,6 +3,7 @@ title: "{{title}}"
 calendar: "{{calendar}}"
 start: {{start_iso}}
 end: {{end_iso}}
+all_day: {{all_day}}
 uid: "{{uid}}"
 status: "{{status}}"
 location: "{{location}}"

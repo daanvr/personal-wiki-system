@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Email block — ingest mail into the wiki over IMAP (read-only).
+"""Email module — ingest mail into the wiki over IMAP (read-only).
 
 Run with Python 3 (standard library only — no pip install required). Use
 ``python3`` on macOS/Linux, or the ``py`` launcher on Windows (where plain
@@ -19,15 +19,16 @@ Subcommands:
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib import config, imap, notes  # noqa: E402
+from _shared import wikilib  # noqa: E402
 
 STATE_FILE = ".sync-state.json"
+STATE_DEFAULTS = {"folders": {}, "message_ids": []}
 TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "email-note.md"
 
 
@@ -45,29 +46,23 @@ def _excluded(folder: imap.Folder, excludes: set[str]) -> bool:
 
 def scope_folders(conn, account, only=None) -> list[imap.Folder]:
     folders = imap.list_folders(conn)
-    excludes = {x.strip().lower() for x in account.get("EXCLUDE_FOLDERS", "").split(",") if x.strip()}
-    spec = account.get("FOLDERS", "ALL").strip()
     if only:
-        folders = [f for f in folders if f.name == only]
-    elif spec.upper() != "ALL":
-        wanted = {x.strip() for x in spec.split(",") if x.strip()}
-        folders = [f for f in folders if f.name in wanted]
+        # An explicitly requested folder is never filtered by the exclude list.
+        return [f for f in folders if f.name == only]
+    spec = account.get("FOLDERS", "ALL").strip()
+    if spec.upper() != "ALL":
+        wanted = {x.strip().lower() for x in spec.split(",") if x.strip()}
+        folders = [f for f in folders if f.name.lower() in wanted]
+    excludes = {x.strip().lower() for x in account.get("EXCLUDE_FOLDERS", "").split(",") if x.strip()}
     return [f for f in folders if not _excluded(f, excludes)]
 
 
 def load_state(out_dir: Path) -> dict:
-    path = out_dir / STATE_FILE
-    if path.is_file():
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            pass
-    return {"version": 1, "folders": {}, "message_ids": []}
+    return wikilib.load_state(out_dir, STATE_FILE, STATE_DEFAULTS)
 
 
 def save_state(out_dir: Path, state: dict) -> None:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / STATE_FILE).write_text(json.dumps(state, indent=2), encoding="utf-8")
+    wikilib.save_state(out_dir, STATE_FILE, state)
 
 
 # --- commands --------------------------------------------------------------
@@ -119,17 +114,22 @@ def cmd_sync(account, provider, dry_run: bool, only: str | None, limit: int | No
                 since = 0  # server renumbered UIDs — re-scan (dedup by Message-ID)
 
             imap.select_readonly(conn, folder.name)
-            uids = imap.search_uids(conn, since)
+            # search_uids returns ascending; drop UIDs at/below the watermark
+            # ("UID N:*" always echoes back the highest-UID message).
+            uids = [u for u in imap.search_uids(conn, since) if u > since]
             if limit:
                 uids = uids[:limit]
             print(f"{folder.name}: {len(uids)} message(s) to consider")
 
             highest = since
+            pinned = False  # a failed fetch pins the watermark so it retries next run
             for uid in uids:
-                highest = max(highest, uid)
                 raw = imap.fetch_raw(conn, uid)
                 if not raw:
+                    pinned = True
                     continue
+                if not pinned:
+                    highest = uid
                 msg = notes.parse_message(raw)
                 mid = notes.header(msg, "message-id")
                 if mid and mid in seen_ids:
@@ -138,7 +138,7 @@ def cmd_sync(account, provider, dry_run: bool, only: str | None, limit: int | No
 
                 rel = notes.folder_subpath(folder.name, folder.delimiter)
                 fname = notes.note_filename(
-                    notes.message_date(msg), notes.header(msg, "subject"), mid
+                    notes.message_date(msg), notes.header(msg, "subject"), mid, msg
                 )
                 note_path = out_dir / rel / fname
                 if note_path.exists():
@@ -160,16 +160,16 @@ def cmd_sync(account, provider, dry_run: bool, only: str | None, limit: int | No
                         att_dir.mkdir(parents=True, exist_ok=True)
                         for att_name, data in attachments:
                             (att_dir / att_name).write_bytes(data)
-                    if mid:
-                        seen_ids.add(mid)
+                if mid:
+                    seen_ids.add(mid)
                 written += 1
 
             if not dry_run:
+                # Persist per folder so a failure later in the run doesn't
+                # discard the progress already made.
                 state["folders"][folder.name] = {"uidvalidity": uidvalidity, "last_uid": highest}
-
-        if not dry_run:
-            state["message_ids"] = sorted(seen_ids)
-            save_state(out_dir, state)
+                state["message_ids"] = sorted(seen_ids)
+                save_state(out_dir, state)
     finally:
         conn.logout()
 
@@ -180,6 +180,16 @@ def cmd_sync(account, provider, dry_run: bool, only: str | None, limit: int | No
 
 # --- entry point -----------------------------------------------------------
 
+def _positive_int(value: str) -> int:
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected a number, got {value!r}") from None
+    if ivalue <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return ivalue
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Ingest mail into the wiki (read-only IMAP).")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -187,7 +197,7 @@ def main(argv=None) -> int:
     p_sync = sub.add_parser("sync", help="fetch new mail and write notes")
     p_sync.add_argument("--dry-run", action="store_true", help="show what would happen; write nothing")
     p_sync.add_argument("--folder", help="restrict to a single folder by exact name")
-    p_sync.add_argument("--limit", type=int, help="max messages per folder this run")
+    p_sync.add_argument("--limit", type=_positive_int, help="max messages per folder this run")
     args = parser.parse_args(argv)
 
     account = config.load_account()

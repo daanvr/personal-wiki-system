@@ -24,10 +24,19 @@ a gitignored file); the ingested calendar notes are written into the **private**
 
 ## Setup
 
-1. **Have Python 3.9+** and install this module's dependencies:
+1. **Have Python 3.9+** and install this module's dependencies. Invoke Python
+   as `python3` on macOS/Linux, or via the `py` launcher on Windows (plain
+   `python` there is the Microsoft Store stub); the examples below use
+   `python3`:
    ```sh
+   # macOS / Linux
    cd modules/calendar
    python3 -m pip install -r requirements.txt
+   ```
+   ```powershell
+   # Windows (PowerShell)
+   cd modules/calendar
+   py -m pip install -r requirements.txt
    ```
 
 2. **Create your account config:**
@@ -40,10 +49,17 @@ a gitignored file); the ingested calendar notes are written into the **private**
    app-specific password if available, then expose it via the env var named in
    `SECRET_REF` (default `CIRRUX_APP_PASSWORD`):
    ```sh
+   # macOS / Linux (current shell)
    export CIRRUX_APP_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+   ```
+   ```powershell
+   # Windows (PowerShell, current session)
+   $env:CIRRUX_APP_PASSWORD = "xxxx-xxxx-xxxx-xxxx"
    ```
 
 ## Usage
+
+Use `python3` on macOS/Linux (or `py` on Windows):
 
 ```sh
 python3 ingest.py check
