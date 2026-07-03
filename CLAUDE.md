@@ -41,7 +41,23 @@ the former belongs in this repository.
 - **Shareability** — the system can be published, shared, and collaborated on by others
   without exposing anything personal.
 
+## Repository layout
+
+| Path                | Purpose                                                                   |
+| ------------------- | ------------------------------------------------------------------------- |
+| `config.example`    | Template for `config`; committed.                                         |
+| `config`            | Machine-specific config (`KNOWLEDGE_PATH`); **gitignored**, never commit. |
+| `init.sh`           | Scaffold a new knowledge base and write both repos' configs.              |
+| `knowledge-path.sh` | Print the resolved absolute path to the knowledge base.                   |
+| `lib/config.sh`     | Sourceable helpers: `resolve_path`, `get_config_value`, `knowledge_path`. |
+
+`config` sets `KNOWLEDGE_PATH` — absolute, or relative to this repo's root (e.g.
+`../knowledge` when the two repos are siblings). Run `./init.sh [path]` to create a
+knowledge base (defaults to `../knowledge`); it also generates `config`. The created
+knowledge base contains `sources/`, `wiki/`, its own `config`/`config.example`, and a
+`.gitignore`.
+
 ## Status
 
-Early setup. The repository is essentially empty; structure and tooling will be added over
-time. Keep this file up to date as the system takes shape.
+Setup in progress. Config + init tooling are in place; wiki structure and conventions are
+still to be designed. Keep this file up to date as the system takes shape.
