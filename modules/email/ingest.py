@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+"""Email module — ingest mail into the wiki over IMAP (read-only).
+
+Run with Python 3 (standard library only — no pip install required). Use
+``python3`` on macOS/Linux, or the ``py`` launcher on Windows (where plain
+``python`` is the Microsoft Store stub):
+
+    python3 ingest.py check    # macOS/Linux
+    py ingest.py check         # Windows
+
+Subcommands:
+
+    check                 # connect, authenticate, list folders + counts
+    sync                  # fetch new mail and write notes
+    sync --dry-run        # show what would be written, write nothing
+    sync --folder INBOX   # restrict to one folder
+    sync --limit 20       # cap messages per folder (handy for a first run)
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lib import config, imap, notes  # noqa: E402
+from _shared import wikilib  # noqa: E402
+
+STATE_FILE = ".sync-state.json"
+STATE_DEFAULTS = {"folders": {}, "message_ids": []}
+TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "email-note.md"
+
+
+# --- helpers ---------------------------------------------------------------
+
+def _excluded(folder: imap.Folder, excludes: set[str]) -> bool:
+    if not excludes:
+        return False
+    name = folder.name.lower()
+    if name in excludes:
+        return True
+    sep = folder.delimiter or "/"
+    return any(seg.lower() in excludes for seg in folder.name.split(sep))
+
+
+def scope_folders(conn, account, only=None) -> list[imap.Folder]:
+    folders = imap.list_folders(conn)
+    if only:
+        # An explicitly requested folder is never filtered by the exclude list.
+        return [f for f in folders if f.name == only]
+    spec = account.get("FOLDERS", "ALL").strip()
+    if spec.upper() != "ALL":
+        wanted = {x.strip().lower() for x in spec.split(",") if x.strip()}
+        folders = [f for f in folders if f.name.lower() in wanted]
+    excludes = {x.strip().lower() for x in account.get("EXCLUDE_FOLDERS", "").split(",") if x.strip()}
+    return [f for f in folders if not _excluded(f, excludes)]
+
+
+def load_state(out_dir: Path) -> dict:
+    return wikilib.load_state(out_dir, STATE_FILE, STATE_DEFAULTS)
+
+
+def save_state(out_dir: Path, state: dict) -> None:
+    wikilib.save_state(out_dir, STATE_FILE, state)
+
+
+# --- commands --------------------------------------------------------------
+
+def cmd_check(account, provider) -> int:
+    password = config.get_secret(account)
+    print(f"Connecting to {provider.get('IMAP_HOST')}:{provider.get('IMAP_PORT')} "
+          f"as {account['ACCOUNT']} ...")
+    conn = imap.connect(account, provider, password)
+    try:
+        print("Authenticated OK.\n")
+        excludes = {x.strip().lower() for x in account.get("EXCLUDE_FOLDERS", "").split(",") if x.strip()}
+        in_scope = {f.name for f in scope_folders(conn, account)}
+        print(f"{'':2} {'messages':>8}  folder")
+        print("-" * 40)
+        for f in imap.list_folders(conn):
+            st = imap.folder_status(conn, f.name)
+            mark = "*" if f.name in in_scope else (" " if not _excluded(f, excludes) else "x")
+            print(f"{mark:2} {st['messages']:>8}  {f.name}")
+        print("\n  * = in sync scope   x = excluded   (blank = not selected by FOLDERS)")
+    finally:
+        conn.logout()
+    return 0
+
+
+def cmd_sync(account, provider, dry_run: bool, only: str | None, limit: int | None) -> int:
+    password = config.get_secret(account)
+    out_dir = config.knowledge_path() / "sources" / account.get("OUTPUT_SUBDIR", "email")
+    template = TEMPLATE_PATH.read_text(encoding="utf-8")
+    save_attachments = config.truthy(account.get("SAVE_ATTACHMENTS", "true"))
+
+    state = load_state(out_dir)
+    seen_ids = set(state.get("message_ids", []))
+
+    conn = imap.connect(account, provider, password)
+    written = skipped = 0
+    try:
+        folders = scope_folders(conn, account, only=only)
+        if not folders:
+            print("No folders in scope. Check FOLDERS / EXCLUDE_FOLDERS in config.")
+            return 1
+        print(f"Output: {out_dir}{'  (dry run — nothing will be written)' if dry_run else ''}\n")
+
+        for folder in folders:
+            fstate = state["folders"].get(folder.name, {})
+            uidvalidity = imap.folder_status(conn, folder.name)["uidvalidity"]
+            since = fstate.get("last_uid", 0)
+            if fstate.get("uidvalidity") != uidvalidity:
+                since = 0  # server renumbered UIDs — re-scan (dedup by Message-ID)
+
+            imap.select_readonly(conn, folder.name)
+            # search_uids returns ascending; drop UIDs at/below the watermark
+            # ("UID N:*" always echoes back the highest-UID message).
+            uids = [u for u in imap.search_uids(conn, since) if u > since]
+            if limit:
+                uids = uids[:limit]
+            print(f"{folder.name}: {len(uids)} message(s) to consider")
+
+            highest = since
+            pinned = False  # a failed fetch pins the watermark so it retries next run
+            for uid in uids:
+                raw = imap.fetch_raw(conn, uid)
+                if not raw:
+                    pinned = True
+                    continue
+                if not pinned:
+                    highest = uid
+                msg = notes.parse_message(raw)
+                mid = notes.header(msg, "message-id")
+                if mid and mid in seen_ids:
+                    skipped += 1
+                    continue
+
+                rel = notes.folder_subpath(folder.name, folder.delimiter)
+                fname = notes.note_filename(
+                    notes.message_date(msg), notes.header(msg, "subject"), mid, msg
+                )
+                note_path = out_dir / rel / fname
+                if note_path.exists():
+                    if mid:
+                        seen_ids.add(mid)
+                    skipped += 1
+                    continue
+
+                attachments = notes.extract_attachments(msg) if save_attachments else []
+                content = notes.render(template, msg, folder.name, [n for n, _ in attachments])
+
+                if dry_run:
+                    print(f"  would write {note_path.relative_to(out_dir)}")
+                else:
+                    note_path.parent.mkdir(parents=True, exist_ok=True)
+                    note_path.write_text(content, encoding="utf-8")
+                    if attachments:
+                        att_dir = note_path.parent / "attachments" / fname[:-3]
+                        att_dir.mkdir(parents=True, exist_ok=True)
+                        for att_name, data in attachments:
+                            (att_dir / att_name).write_bytes(data)
+                if mid:
+                    seen_ids.add(mid)
+                written += 1
+
+            if not dry_run:
+                # Persist per folder so a failure later in the run doesn't
+                # discard the progress already made.
+                state["folders"][folder.name] = {"uidvalidity": uidvalidity, "last_uid": highest}
+                state["message_ids"] = sorted(seen_ids)
+                save_state(out_dir, state)
+    finally:
+        conn.logout()
+
+    verb = "Would write" if dry_run else "Wrote"
+    print(f"\n{verb} {written} note(s); skipped {skipped} already-ingested.")
+    return 0
+
+
+# --- entry point -----------------------------------------------------------
+
+def _positive_int(value: str) -> int:
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected a number, got {value!r}") from None
+    if ivalue <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return ivalue
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="Ingest mail into the wiki (read-only IMAP).")
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("check", help="connect, authenticate, and list folders with counts")
+    p_sync = sub.add_parser("sync", help="fetch new mail and write notes")
+    p_sync.add_argument("--dry-run", action="store_true", help="show what would happen; write nothing")
+    p_sync.add_argument("--folder", help="restrict to a single folder by exact name")
+    p_sync.add_argument("--limit", type=_positive_int, help="max messages per folder this run")
+    args = parser.parse_args(argv)
+
+    account = config.load_account()
+    provider = config.load_provider(account["PROVIDER"])
+
+    if args.command == "check":
+        return cmd_check(account, provider)
+    return cmd_sync(account, provider, args.dry_run, args.folder, args.limit)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

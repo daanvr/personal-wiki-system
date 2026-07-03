@@ -1,0 +1,2 @@
+caldav>=2.2,<4
+icalendar>=5,<8

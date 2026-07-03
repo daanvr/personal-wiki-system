@@ -50,6 +50,10 @@ the former belongs in this repository.
 | `init.sh`           | Scaffold a new knowledge base and write both repos' configs.              |
 | `knowledge-path.sh` | Print the resolved absolute path to the knowledge base.                   |
 | `lib/config.sh`     | Sourceable helpers: `resolve_path`, `get_config_value`, `knowledge_path`. |
+| `modules/_shared/`  | Python helpers shared by all ingestion modules (`wikilib.py`).            |
+| `modules/email/`    | Read-only IMAP ingestion: mail → Markdown notes in the knowledge base.    |
+| `modules/calendar/` | Read-only CalDAV ingestion: events → Markdown notes.                      |
+| `docs/`             | Design docs and proposals (e.g. the modular installer proposal).          |
 
 `config` sets `KNOWLEDGE_PATH` — absolute, or relative to this repo's root (e.g.
 `../knowledge` when the two repos are siblings). Run `./init.sh [path]` to create a
@@ -59,5 +63,8 @@ knowledge base contains `sources/`, `wiki/`, its own `config`/`config.example`, 
 
 ## Status
 
-Setup in progress. Config + init tooling are in place; wiki structure and conventions are
-still to be designed. Keep this file up to date as the system takes shape.
+Setup in progress. Config + init tooling and the first two ingestion modules (email over
+IMAP, calendar over CalDAV — both read-only) are in place; wiki structure and conventions
+are still to be designed. Keep this file up to date as the system takes shape.
+
+Note for other agents: `AGENTS.md` is a pointer to this file — keep guidance here only.
