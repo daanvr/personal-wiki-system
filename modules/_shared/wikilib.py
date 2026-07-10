@@ -14,6 +14,7 @@ import copy
 import json
 import os
 import re
+import sys
 from pathlib import Path
 
 # .../system/modules/_shared/wikilib.py -> parents[2] == .../system
@@ -66,6 +67,64 @@ def knowledge_path() -> Path:
             f"(copy config.example to config, or run ./init.sh)."
         )
     return resolve_path(raw, SYSTEM_ROOT).resolve()
+
+
+def settings_dir() -> Path:
+    """User configuration home inside the (private) knowledge repo."""
+    return knowledge_path() / "settings"
+
+
+def module_settings_dir(name: str) -> Path:
+    """A module's configuration directory in the knowledge repo."""
+    return settings_dir() / "modules" / name
+
+
+def find_module_config(module_dir: Path) -> Path | None:
+    """Resolve a module's account config: the knowledge-repo settings home
+    first, then the legacy module-local location (with a warning)."""
+    new = module_settings_dir(module_dir.name) / "config"
+    if new.is_file():
+        return new
+    old = module_dir / "config"
+    if old.is_file():
+        print(
+            f"warning: reading legacy config at {old}; "
+            f"run ./init.sh to migrate it to {new}",
+            file=sys.stderr,
+        )
+        return old
+    return None
+
+
+def load_module_account(
+    module_dir: Path, required: tuple[str, ...] = ("PROVIDER", "ACCOUNT")
+) -> tuple[dict[str, str], Path]:
+    """A module's account config plus the path it was resolved from."""
+    path = find_module_config(module_dir)
+    cfg = read_kv(path) if path else {}
+    if not cfg:
+        raise SystemExit(
+            f"No account config for module {module_dir.name!r} "
+            f"(expected {module_settings_dir(module_dir.name) / 'config'}; "
+            f"run ./init.sh to set it up)."
+        )
+    for key in required:
+        if not cfg.get(key):
+            raise SystemExit(f"{key} is missing from {path}.")
+    return cfg, path
+
+
+def find_provider_profile(module_dir: Path, name: str) -> Path | None:
+    """Resolve a provider profile: user profiles in the knowledge repo first
+    (they may override a committed one), then the module's providers/."""
+    for base in (
+        module_settings_dir(module_dir.name) / "providers",
+        module_dir / "providers",
+    ):
+        path = base / f"{name}.conf"
+        if path.is_file():
+            return path
+    return None
 
 
 def check_auth(provider: dict[str, str]) -> None:

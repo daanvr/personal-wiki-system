@@ -2,6 +2,9 @@
 
 A thin binding of the shared helpers in ``modules/_shared/wikilib.py`` to this
 module's directory: account config, provider profiles, and the account secret.
+The account config lives in the knowledge repo's settings home
+(``<knowledge>/settings/modules/email/config``); the legacy module-local
+``config`` still works as a fallback.
 """
 from __future__ import annotations
 
@@ -19,29 +22,31 @@ from _shared.wikilib import (  # noqa: F401  (re-exported for module code)
 # .../system/modules/email/lib/config.py -> parents[1] == .../modules/email
 MODULE_DIR = Path(__file__).resolve().parents[1]
 
+# Directory of the resolved account config; SECRET_FILE resolves against it.
+_config_dir: Path | None = None
+
 
 def load_account() -> dict[str, str]:
-    """The module's account config (modules/email/config)."""
-    cfg = read_kv(MODULE_DIR / "config")
-    if not cfg:
-        raise SystemExit(
-            f"No account config at {MODULE_DIR / 'config'} "
-            f"(copy config.example to config and fill it in)."
-        )
-    for required in ("PROVIDER", "ACCOUNT"):
-        if not cfg.get(required):
-            raise SystemExit(f"{required} is missing from {MODULE_DIR / 'config'}.")
+    """The module's account config (knowledge settings home, or legacy
+    modules/email/config)."""
+    global _config_dir
+    cfg, path = wikilib.load_module_account(MODULE_DIR)
+    _config_dir = path.parent
     return cfg
 
 
 def load_provider(name: str) -> dict[str, str]:
-    path = MODULE_DIR / "providers" / f"{name}.conf"
-    prof = read_kv(path)
+    path = wikilib.find_provider_profile(MODULE_DIR, name)
+    prof = read_kv(path) if path else {}
     if not prof:
-        raise SystemExit(f"Unknown or empty provider profile: {path}")
+        raise SystemExit(
+            f"Unknown or empty provider profile: {name!r} "
+            f"(looked in {wikilib.module_settings_dir(MODULE_DIR.name) / 'providers'} "
+            f"and {MODULE_DIR / 'providers'})."
+        )
     wikilib.check_auth(prof)
     return prof
 
 
 def get_secret(account: dict[str, str]) -> str:
-    return wikilib.get_secret(account, MODULE_DIR)
+    return wikilib.get_secret(account, _config_dir or MODULE_DIR)

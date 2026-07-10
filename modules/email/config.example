@@ -1,10 +1,11 @@
 # Email module — account configuration.
 #
-# Copy this file to `config` (which is gitignored) and fill it in:
-#     cp config.example config
+# The real config lives in the PRIVATE knowledge repo, created by the setup
+# wizard: <knowledge>/settings/modules/email/config. Run ./init.sh (in the
+# system repo root) to set it up, or copy this template there by hand.
 #
-# This file MAY contain your email address (personal), so the real `config`
-# is never committed. The password is NOT stored here — see SECRET_REF below.
+# It may contain your email address (personal) — which is why it lives in the
+# private repo. The password is NOT stored in it — see SECRET_REF below.
 
 # Which provider profile to use: a file name in providers/ without the .conf
 # extension. "cirrux" -> providers/cirrux.conf
@@ -21,8 +22,8 @@ ACCOUNT=you@cirrux.co
 SECRET_REF=CIRRUX_APP_PASSWORD
 #   2. ...or a path to a gitignored file containing only the password.
 #      Used only if the env var above is unset. Absolute, or relative to
-#      this module directory.
-# SECRET_FILE=secret.txt
+#      the directory this config file is in.
+# SECRET_FILE=secret
 
 # Folders to ingest:
 #   ALL                         every selectable folder on the account

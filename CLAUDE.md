@@ -47,24 +47,35 @@ the former belongs in this repository.
 | ------------------- | ------------------------------------------------------------------------- |
 | `config.example`    | Template for `config`; committed.                                         |
 | `config`            | Machine-specific config (`KNOWLEDGE_PATH`); **gitignored**, never commit. |
-| `init.sh`           | Scaffold a new knowledge base and write both repos' configs.              |
+| `init.sh`           | Thin launcher for the setup wizard (finds Python, runs `wizard.py`).      |
+| `wizard.py`         | Setup wizard entry point (interactive onboarding; stdlib-only).           |
+| `lib/wizard/`       | The wizard engine (see `docs/setup-wizard.md` for the module contract).   |
 | `knowledge-path.sh` | Print the resolved absolute path to the knowledge base.                   |
-| `lib/config.sh`     | Sourceable helpers: `resolve_path`, `get_config_value`, `knowledge_path`. |
+| `lib/config.sh`     | Sourceable helpers: `resolve_path`, `get_config_value`, `knowledge_path`, `module_config_path`. |
 | `modules/_shared/`  | Python helpers shared by all ingestion modules (`wikilib.py`).            |
 | `modules/email/`    | Read-only IMAP ingestion: mail → Markdown notes in the knowledge base.    |
 | `modules/calendar/` | Read-only CalDAV ingestion: events → Markdown notes.                      |
-| `docs/`             | Design docs and proposals (e.g. the modular installer proposal).          |
+| `tests/`            | Unit tests (`python3 -m unittest discover -s tests`).                     |
+| `docs/`             | Design docs (`setup-wizard.md` documents the module/wizard contract).     |
 
 `config` sets `KNOWLEDGE_PATH` — absolute, or relative to this repo's root (e.g.
-`../knowledge` when the two repos are siblings). Run `./init.sh [path]` to create a
-knowledge base (defaults to `../knowledge`); it also generates `config`. The created
-knowledge base contains `sources/`, `wiki/`, its own `config`/`config.example`, and a
-`.gitignore`.
+`../knowledge` when the two repos are siblings). Run `./init.sh [path]` to scaffold a
+knowledge base and set up modules interactively.
+
+**Where user configs live:** module account configs (personal data — email address,
+folder selections) live in the **private knowledge repo** at
+`<knowledge>/settings/modules/<module>/config`, written by the wizard and committed
+there. The legacy location (`modules/<module>/config` in this repo, gitignored) still
+works as a fallback but is deprecated. Secrets are never in any config: they resolve
+from the env var named by `SECRET_REF`, or a gitignored `secret` file next to the
+config. Each module is self-describing: `module.conf` (manifest), `config.example`
+(doubles as the wizard's prompts), `providers/*.conf` (committed connection profiles).
 
 ## Status
 
-Setup in progress. Config + init tooling and the first two ingestion modules (email over
-IMAP, calendar over CalDAV — both read-only) are in place; wiki structure and conventions
-are still to be designed. Keep this file up to date as the system takes shape.
+Setup in progress. Config, the setup wizard, and the first two ingestion modules (email
+over IMAP, calendar over CalDAV — both read-only) are in place; wiki structure and
+conventions are still to be designed. Keep this file up to date as the system takes
+shape.
 
 Note for other agents: `AGENTS.md` is a pointer to this file — keep guidance here only.

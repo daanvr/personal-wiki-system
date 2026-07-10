@@ -1,6 +1,11 @@
 # Proposal: a modular installer for the wiki system
 
-**Status:** Draft for discussion · **Date:** 2026-06-17
+**Status:** Implemented (2026-07-10) — superseded by [setup-wizard.md](setup-wizard.md),
+which documents what was actually built. Differences from this draft: the installer is
+Python (stdlib-only; `init.sh` is a thin launcher), per-module `setup.sh` was replaced
+by a declarative `module.conf` + prompts derived from `config.example`, user configs
+moved into the knowledge repo (`<knowledge>/settings/modules/<m>/`), and setup is
+guided + live-verified rather than scaffold-only. · **Date:** 2026-06-17
 
 ## Context
 
