@@ -36,15 +36,30 @@ The tooling is cross-platform (macOS, Linux, Windows):
 
 ## Getting started
 
-Create a knowledge base next to this repository:
+Run the setup wizard:
 
 ```sh
-./init.sh                 # creates ../knowledge with sources/ and wiki/
-./init.sh /path/to/kb     # or point it at a specific location
+./init.sh                 # interactive: scaffold + guided module setup
+./init.sh /path/to/kb     # put the knowledge base somewhere specific
 ```
 
-This scaffolds the knowledge base (`sources/`, `wiki/`), its `config` and `.gitignore`,
-and writes this repo's `config`. Print the resolved knowledge-base path any time with:
+The wizard scaffolds the knowledge base (`sources/`, `wiki/`, `settings/`), then offers
+each available module (email, calendar, ...) and walks you through configuring it:
+provider selection, app-password instructions, per-field prompts, and a live connection
+check at the end — so setup finishes with a proven-working integration. Re-run it any
+time; it is idempotent and pre-fills your existing answers.
+
+Non-interactive variants:
+
+```sh
+./init.sh --list          # show modules + status
+./init.sh --with email    # set up specific modules
+./init.sh --all-modules   # everything available
+./init.sh --no-modules    # base scaffold only
+./init.sh --yes           # accept defaults, scaffold configs to edit by hand
+```
+
+Print the resolved knowledge-base path any time with:
 
 ```sh
 ./knowledge-path.sh
@@ -52,12 +67,25 @@ and writes this repo's `config`. Print the resolved knowledge-base path any time
 
 ## Configuration
 
-`config` (gitignored, per machine) defines where the knowledge base lives via
-`KNOWLEDGE_PATH`. It may be **absolute** (a specific location on this machine) or
-**relative** to this repo's root (e.g. `../knowledge` when the repos sit side by side).
-Copy `config.example` to `config`, or let `init.sh` generate it.
+Two kinds of config, in two places:
+
+- **`config` in this repo** (gitignored, per machine) holds only the bootstrap pointer:
+  `KNOWLEDGE_PATH`, absolute or relative to this repo's root (e.g. `../knowledge`).
+- **Your module settings live in the knowledge repo** at
+  `<knowledge>/settings/modules/<module>/config`. They contain personal data (your
+  email address, folder choices), so they belong in the **private** repo — versioned
+  and backed up there, and they survive re-cloning this system repo. Passwords are
+  never stored in them: each module resolves its secret from an environment variable
+  (`SECRET_REF`), or from a gitignored `secret` file the wizard can write next to the
+  config.
+
+Each module keeps its committed `config.example` (the template and documentation) and
+`providers/*.conf` profiles here in the system repo. See
+[docs/setup-wizard.md](docs/setup-wizard.md) for how modules describe themselves to the
+wizard.
 
 ## Status
 
-Setup in progress — config and init tooling are in place; wiki structure and conventions
+Config, the setup wizard, and the first two ingestion modules (email over IMAP,
+calendar over CalDAV — both read-only) are in place; wiki structure and conventions
 are still to be designed.

@@ -29,6 +29,24 @@ get_config_value() {
   sed -n "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*//p" "$file" | tail -n1
 }
 
+# module_config_path <name>
+# Print the path to a module's account config: the knowledge-repo settings
+# home first (<knowledge>/settings/modules/<name>/config), then the legacy
+# module-local location. Prints nothing and returns 1 if neither exists.
+module_config_path() {
+  local name="$1" kb new old
+  kb="$(knowledge_path)" || return 1
+  new="$kb/settings/modules/$name/config"
+  old="$SYSTEM_ROOT/modules/$name/config"
+  if [ -f "$new" ]; then
+    printf '%s\n' "$new"
+  elif [ -f "$old" ]; then
+    printf '%s\n' "$old"
+  else
+    return 1
+  fi
+}
+
 # knowledge_path
 # Print the absolute path to the knowledge base, read from the system config.
 # Canonicalizes the path if it already exists. Exits non-zero if unset.

@@ -13,41 +13,46 @@ other CalDAV-capable service.
 | --- | --- | --- |
 | Transport (CalDAV, read-only) | `lib/caldav_client.py` | public |
 | Provider profile (base URL/auth) | `providers/<name>.conf` | **public** — no secrets |
-| Account + password | `config` (gitignored) + env/keychain | **private — never committed** |
+| Account config | `<knowledge>/settings/modules/calendar/config` | **private** (knowledge repo) |
+| Password | env var (`SECRET_REF`) or gitignored `secret` file | **never committed anywhere** |
 | Event → note rendering | `lib/events.py`, `templates/calendar-event.md` | public |
 | The notes themselves | `<knowledge>/sources/<subdir>/` | **private** (separate repo) |
 
-Nothing personal lives in this repo. The account address sits in a gitignored
-`config`; the password is resolved at runtime from an environment variable (or
-a gitignored file); the ingested calendar notes are written into the **private**
-`knowledge` repository.
+Nothing personal lives in this repo. The account config (it contains your
+address) lives in the **private** knowledge repo; the password is resolved at
+runtime from an environment variable (or a gitignored file); the ingested
+calendar notes are written into the knowledge repo too.
 
 ## Setup
 
-1. **Have Python 3.9+** and install this module's dependencies. Invoke Python
-   as `python3` on macOS/Linux, or via the `py` launcher on Windows (plain
-   `python` there is the Microsoft Store stub); the examples below use
-   `python3`:
+**Run the setup wizard** from the system repo root — it checks this module's
+Python dependencies (offering to `pip install` them), walks you through
+provider, account, calendars, and the password, then verifies the connection
+live:
+
+```sh
+./init.sh                # or: ./init.sh --with calendar
+```
+
+Requires Python 3.9+. Invoke Python as `python3` on macOS/Linux, or via the
+`py` launcher on Windows (plain `python` there is the Microsoft Store stub).
+
+<details>
+<summary>Manual setup (what the wizard does for you)</summary>
+
+1. Install this module's dependencies:
    ```sh
-   # macOS / Linux
-   cd modules/calendar
-   python3 -m pip install -r requirements.txt
-   ```
-   ```powershell
-   # Windows (PowerShell)
-   cd modules/calendar
-   py -m pip install -r requirements.txt
+   # macOS / Linux                      # Windows (PowerShell)
+   cd modules/calendar                  # cd modules/calendar
+   python3 -m pip install -r requirements.txt   # py -m pip install -r requirements.txt
    ```
 
-2. **Create your account config:**
-   ```sh
-   cp config.example config        # `config` is gitignored
-   ```
-   Edit `config`: set `ACCOUNT` to your address and confirm `PROVIDER=cirrux`.
+2. Copy `config.example` to `<knowledge>/settings/modules/calendar/config` and
+   fill it in: set `ACCOUNT` to your address and confirm `PROVIDER=cirrux`.
 
-3. **Provide the password without committing it.** Generate a Cirrux
-   app-specific password if available, then expose it via the env var named in
-   `SECRET_REF` (default `CIRRUX_APP_PASSWORD`):
+3. Provide the password without committing it: generate a Cirrux app-specific
+   password if available, then expose it via the env var named in `SECRET_REF`
+   (default `CIRRUX_APP_PASSWORD`):
    ```sh
    # macOS / Linux (current shell)
    export CIRRUX_APP_PASSWORD="xxxx-xxxx-xxxx-xxxx"
@@ -56,6 +61,9 @@ a gitignored file); the ingested calendar notes are written into the **private**
    # Windows (PowerShell, current session)
    $env:CIRRUX_APP_PASSWORD = "xxxx-xxxx-xxxx-xxxx"
    ```
+   Or put it in a file named `secret` next to that config (gitignored there)
+   and set `SECRET_FILE=secret`.
+</details>
 
 ## Usage
 
@@ -84,8 +92,11 @@ and shows which calendars are in scope, before anything is written.
 
 ## Adding another provider later
 
-Copy `providers/_template.conf` to `providers/<name>.conf`, fill in the CalDAV
-base URL, and set `PROVIDER=<name>` in `config`. No code changes.
+The wizard's "Other..." choice creates one for you (stored privately in
+`<knowledge>/settings/modules/calendar/providers/`). Or by hand: copy
+`providers/_template.conf` to `providers/<name>.conf`, fill in the CalDAV
+base URL, and set `PROVIDER=<name>` in your config. No code changes — and a
+good profile can be promoted into this repo for everyone.
 
 ## Current limitations
 
